@@ -246,6 +246,8 @@ class Switch (EventMixin):
     msg.hard_timeout = FLOW_HARD_TIMEOUT
     msg.actions.append(of.ofp_action_output(port = out_port))
     msg.buffer_id = buf
+    if switch.connection == None:
+	print "in install, switch dpid = ", switch.dpid 
     switch.connection.send(msg)
 
   def _install_path (self, p, match, packet_in=None):
@@ -332,7 +334,7 @@ class Switch (EventMixin):
         event.ofp.buffer_id = None # Mark is dead
         msg.in_port = event.port
         self.connection.send(msg)
-
+	
     packet = event.parsed
 
     loc = (self, event.port) # Place we saw this ethaddr
@@ -490,7 +492,9 @@ class l2_multi (EventMixin):
       sw = Switch()
       switches[event.dpid] = sw
       sw.connect(event.connection)
+      print "Connecting if, dpid= ", event.dpid
     else:
+      print "Connecting else, dpid = ", event.dpid
       sw.connect(event.connection)
 
   def _handle_BarrierIn (self, event):
@@ -502,7 +506,7 @@ class l2_multi (EventMixin):
     wp.notify(event)
 
 
-def launch ():
+def launch (): 
   core.registerNew(l2_multi)
 
   timeout = min(max(PATH_SETUP_TIME, 5) * 2, 15)
