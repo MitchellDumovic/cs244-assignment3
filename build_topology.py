@@ -5,6 +5,7 @@ from mininet.node import CPULimitedHost
 from mininet.link import TCLink
 from mininet.node import OVSController
 from mininet.node import Controller
+from mininet.node import RemoteController
 from mininet.util import dumpNodeConnections
 from mininet.cli import CLI
 	
@@ -22,7 +23,8 @@ class DCellTop (Topo):
 		init_pref = []
 		if l == 0:
 			init_pref = ["0"]
-		self.build_topology(init_pref, n, l)
+		# self.build_topology(init_pref, n, l)
+		self.build_trivial_topology()
 		print 'done building'
 
 	def find_t_k(self, n, l):
@@ -78,12 +80,13 @@ class DCellTop (Topo):
 	def build_trivial_topology(self):
 		# to test controller
 		# h1 -> s1 -> s2 -> s3 -> h2
-		h1 = self.addHost('h1')
-                h2 = self.addHost('h2')
-                s1 = self.addSwitch('s1')
-                s2 = self.addSwitch('s2')
-                s3 = self.addSwitch('s3')
+		h1 = self.addHost('h1', mac="00:00:00:00:00:11")
+                h2 = self.addHost('h2', mac="00:00:00:00:22:00")
+                s1 = self.addSwitch('s1', mac="00:00:00:33:00:00")
+                s2 = self.addSwitch('s2', mac="00:00:44:00:00:00")
+                s3 = self.addSwitch('s3', mac="00:55:00:00:00:00")
                 self.addLink(h1, s1)
+		self.addLink(s1, s2)
                 self.addLink(s2, s3)
                 self.addLink(s3, h2)
 
@@ -92,7 +95,7 @@ def main():
 	n = int(sys.argv[1])
 	l = int(sys.argv[2])
 	topo = DCellTop(n, l)
-	net = Mininet(topo=topo, host=CPULimitedHost, link = TCLink, controller=OVSController)
+	net = Mininet(topo=topo, host=CPULimitedHost, link = TCLink, controller=RemoteController)
         net.start()
 	
 
