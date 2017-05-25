@@ -26,97 +26,29 @@ import pox.openflow.libopenflow_01 as of
 
 log = core.getLogger()
 
+# Switches we know of.  [dpid] -> Switch
+switches = {}
 
 
-class DCellController (object):
-  """
-  A Tutorial object is created for each switch that connects.
-  A Connection object for that switch is passed to the __init__ function.
-  """
-  def __init__ (self, connection):
-    # Keep track of the connection to the switch so that we can
-    # send it messages!
+class DCellSwitch (object):
+  def __init__ (self):
+    self.connection = None
+    self.dpid = None
+
+  def connect (self, connection):
+    assert(connection is not None)
+    if self.dpid is None:
+      self.dpid = connection.dpid
+    assert self.dpid == connection.dpid
     self.connection = connection
-
-    # This binds our PacketIn event listener
     connection.addListeners(self)
+    log.info("Connect %s" % (connection,))
 
-    # Use this table to keep track of which ethernet address is on
-    # which switch port (keys are MACs, values are ports).
-    self.mac_to_port = {}
-
-
-  def resend_packet (self, packet_in, out_port):
-    """
-    Instructs the switch to resend a packet that it had sent to us.
-    "packet_in" is the ofp_packet_in object the switch had sent to the
-    controller due to a table-miss.
-    """
-    msg = of.ofp_packet_out()
-    msg.data = packet_in
-
-    # Add an action to send to the specified port
-    action = of.ofp_action_output(port = out_port)
-    msg.actions.append(action)
-
-    # Send message to switch
-    self.connection.send(msg)
-
-
-  def act_like_hub (self, packet, packet_in):
-    """
-    Implement hub-like behavior -- send all packets to all ports besides
-    the input port.
-    """
-    # We want to output to all ports -- we do that using the special
-    # OFPP_ALL port as the output port.  (We could have also used
-    # OFPP_FLOOD.)
-    self.resend_packet(packet_in, of.OFPP_ALL)
-
-    # Note that if we didn't get a valid buffer_id, a slightly better
-    # implementation would check that we got the full data before
-    # sending it (len(packet_in.data) should be == packet_in.total_len)).
-
-
-  def act_like_switch (self, packet, packet_in):
-    """
-    Implement switch-like behavior.
-    """
-
-    """ # DELETE THIS LINE TO START WORKING ON THIS (AND THE ONE BELOW!) #
-
-    # Here's some psuedocode to start you off implementing a learning
-    # switch.  You'll need to rewrite it as real Python code.
-
-    # Learn the port for the source MAC
-    self.mac_to_port ... <add or update entry>
-
-    if the port associated with the destination MAC of the packet is known:
-      # Send packet out the associated port
-      self.resend_packet(packet_in, ...)
-
-      # Once you have the above working, try pushing a flow entry
-      # instead of resending the packet (comment out the above and
-      # uncomment and complete the below.)
-
-      log.debug("Installing flow...")
-      # Maybe the log statement should have source/destination/port?
-
-      #msg = of.ofp_flow_mod()
-      #
-      ## Set fields to match received packet
-      #msg.match = of.ofp_match.from_packet(packet)
-      #
-      #< Set other fields of flow_mod (timeouts? buffer_id?) >
-      #
-      #< Add an output action, and send -- similar to resend_packet() >
-
-    else:
-      # Flood the packet out everything but the input port
-      # This part looks familiar, right?
-      self.resend_packet(packet_in, of.OFPP_ALL)
-
-    """ # DELETE THIS LINE TO START WORKING ON THIS #
+  def disconnect (self):
+    if self.connection is not None:
+      log.info("Disconnect %s" % (self.connection,))
+      self.connection.removeListeners(self._listeners)
+      self.connection = None
 
 
   def _handle_PacketIn (self, event):
@@ -133,8 +65,34 @@ class DCellController (object):
 
     # Comment out the following line and uncomment the one after
     # when starting the exercise.
-    self.act_like_hub(packet, packet_in)
-    #self.act_like_switch(packet, packet_in)
+
+  def _handle_ConnectionDown (self, event):
+    self.disconnect()
+
+
+class dcell_routing (object):
+
+  def __init__ (self, numSwitches):
+    core.openflow.addListeners(self)
+    self.numSwitches = numSwitches
+    self.switchCounter = 0
+
+  def _handle_ConnectionUp (self, event):
+    log.info("Connection %s" % (event.connection,))
+    sw = switches.get(event.dpid)
+    if sw is None:
+      sw = DCellSwitch()
+      switches[event.dpid] = sw
+      sw.connect(event.connection)
+      self.switchCounter+=1
+      if self.switchCounter == self.numSwitches:
+        installAllPaths()
+    else:
+      log.warning("Reconnecting. DPID = " + str(event.dpid) + ", switchCounter = " + self.switchCounter)
+      sw.connect(event.connection)
+
+  def installAllPaths():
+    pass
 
 
 

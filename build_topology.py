@@ -62,23 +62,29 @@ class DCellTop (Topo):
 				blocks[i+1] = switchId
 		return ':'.join(blocks)
 
+	def gen_dpid(self, pref, n_type):
+		return self.gen_mac(pref, n_type).replace(':', '') + "0000"
+
 	def build_topology(self, pref, n, l):
 		if l == 0:
 			masterswitch = self.gen_name(pref, "m")
 			macMaster = self.gen_mac(pref, "m")
-			self.addSwitch(masterswitch, mac=macMaster)
-			print masterswitch, macMaster
+			dpidMaster = self.gen_dpid(pref, 'm')
+			self.addSwitch(masterswitch, mac=macMaster, dpid=dpidMaster)
+			print masterswitch, macMaster, dpidMaster
 			for i in range(0, n):
 				new_pref = pref + [str(i)]
 				innerswitch = self.gen_name(new_pref, "s")
 				innerhost = self.gen_name(new_pref, "h")
 				macSwitch = self.gen_mac(new_pref, "s")
 				macHost = self.gen_mac(new_pref, "h")
+				dpidSwitch = self.gen_dpid(pref, 's')
+				dpidHost = self.gen_dpid(pref, 'h')
 				
-				print innerswitch, macSwitch
-				print innerhost, macHost
-				self.addSwitch(innerswitch, mac=macSwitch)
-				self.addHost(innerhost, mac=macHost)
+				print innerswitch, macSwitch, dpidSwitch
+				print innerhost, macHost, dpidHost
+				self.addSwitch(innerswitch, mac=macSwitch, dpid=dpidSwitch)
+				self.addHost(innerhost, mac=macHost, dpid=dpidHost)
 				print "linking %s %s:" % (innerswitch, innerhost)
 				# self.addLink(innerswitch, innerhost, bw=self.bw, port1=1, port2=1)
 				self.addLink(innerswitch, innerhost, bw=self.bw)
