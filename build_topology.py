@@ -78,8 +78,8 @@ class DCellTop (Topo):
 				innerhost = self.gen_name(new_pref, "h")
 				macSwitch = self.gen_mac(new_pref, "s")
 				macHost = self.gen_mac(new_pref, "h")
-				dpidSwitch = self.gen_dpid(pref, 's')
-				dpidHost = self.gen_dpid(pref, 'h')
+				dpidSwitch = self.gen_dpid(new_pref, 's')
+				dpidHost = self.gen_dpid(new_pref, 'h')
 				
 				print innerswitch, macSwitch, dpidSwitch
 				print innerhost, macHost, dpidHost
