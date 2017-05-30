@@ -36,6 +36,18 @@ class DCellSwitch (object):
     self.connection = None
     self.dpid = None
 
+  
+  def getMac(self):
+    return ':'.join([self.dpid[i:i + 2] for i in range(0, len(self.dpid), 2)])
+
+  def install(self, dest_mac, port):
+    msg = of.ofp_flow_mod()
+    match = of.ofp_match(dl_dst=EthAddr(dest_mac))
+    msg.match = match
+    msg.actions.append(of.ofp_action_output(port=port))
+    assert self.connection != None
+    self.connection.send(msg)
+
   def connect (self, connection):
     assert(connection is not None)
     if self.dpid is None:
@@ -94,13 +106,14 @@ class dcell_routing (object):
       log.warning("Reconnecting. DPID = " + str(event.dpid) + ", switchCounter = " + self.switchCounter)
       sw.connect(event.connection)
 
-  def toList(self, s):
+  def toList(s, l):
     n_type = s[:2]
-    length = self.l
+    length = l
     if n_type != '00':
       length +=1
     arr = [s[i:i + 2] for i in range(2, len(s), 2)]
     return arr[:length]
+
   def fromList(arr):
     result = ""
     if len(arr) == 1:
@@ -117,17 +130,37 @@ class dcell_routing (object):
   def installAllPaths(self):
     paths = {}
     for src in switches:
-      srcList = self.toList(src)
+      srcList = toList(src, self.l)
       if len(srcList) == self.l:
         continue
       for dst in switches:
-        dstList = self.toList(dst)
+        dstList = toList(dst, self.l)
         if (len(dstList) == self.l):
           continue
         if src == dst:
           continue
-        self.DCellRouting(toList(src), toList(dst), paths)
+        self.DCellRouting(toList(src, self.l), toList(dst, self.l), paths)
+    
+    for (src, dest), path in paths.items():
+      dest_switch = switches[fromList(dest)]
+      prev_switch = switches[fromList(src)]
+      for switch in path:
+        if switch == prev_switch:
+          continue
+          # get port from prev_switch going to switch
+        port = self.get_port(prev_switch, switch)
+        prev_switch.install(dest_switch.getMac(), port)
+        prev_switch = switch
 
+  def get_port(self, switch1, switch2):
+    isMaster1 = switch1.dpid.startsWith('00')
+    isMaster2 = switch2.dpid.startsWith('00')
+    assert(!(isMaster1 and isMaster2))
+    if isMaster2:
+      return 2
+    if isMaster1:
+      return int(toList(switch2.dpid, self.l)[-1]) + 1
+    return 3
 
 
   def DCellRouting(self, src, dest, paths):
@@ -152,19 +185,19 @@ class dcell_routing (object):
     paths[(dest, src)] = path
 
   def findPathInSameDcell(self, src, dst):
-    srcSwitch = switches[self.fromList(src)]
-    destSwitch = switches[self.fromList(dst)]
+    srcSwitch = switches[fromList(src)]
+    destSwitch = switches[fromList(dst)]
 
     masterArr = src[:]
     masterArr[0] = "00"
     masterArr = masterArr[:len(src) - 1]
 
     assert(fromList(masterArr) in switches)
-    masterSwitch = switches[self.fromList(masterArr)]
+    masterSwitch = switches[fromList(masterArr)]
     return [srcSwitch, masterSwitch, destSwitch]
 
   def GetLink(self, pref, cellId1, cellId2):
-    
+    return ([cellId1, cellId2-1], [cellId2, cellId1])    
 
 def launch ():
   """

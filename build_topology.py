@@ -86,11 +86,11 @@ class DCellTop (Topo):
 				self.addSwitch(innerswitch, mac=macSwitch, dpid=dpidSwitch)
 				self.addHost(innerhost, mac=macHost, dpid=dpidHost)
 				print "linking %s %s:" % (innerswitch, innerhost)
-				# self.addLink(innerswitch, innerhost, bw=self.bw, port1=1, port2=1)
-				self.addLink(innerswitch, innerhost, bw=self.bw)
+				# switch to host is port 1 for both switch and host
+				self.addLink(innerswitch, innerhost, bw=self.bw, port1=1, port2=1)
 				print "linking %s %s:" % (innerswitch, masterswitch)
-				self.addLink(innerswitch, masterswitch, bw=self.bw)
-				# self.addLink(innerswitch, masterswitch, bw=self.bw, port1=2, port2=i+1)
+				# switch to master switch is 2 for switch and i+1 for master switch
+				self.addLink(innerswitch, masterswitch, bw=self.bw, port1=2, port2=i+1)
 		else:
 			for i in range(0,  self.get_g(l)):
 				self.build_topology(pref + [str(i)], n, l-1)
@@ -100,8 +100,7 @@ class DCellTop (Topo):
 				for j in range(i + 1, self.get_g(l)):
 					n1 = self.gen_name(pref + [str(i), str(j-1)], "s")
 					n2 = self.gen_name(pref + [str(j), str(i)], "s")
-					self.addLink(n1, n2, bw=self.bw)
-					# self.addLink(n1, n2, bw=self.bw, port1=3+ i, port2=3+j)
+					self.addLink(n1, n2, bw=self.bw, port1=3, port2=3)
 					print "linking %s %s:" % (n1, n2)
 
 	def build_trivial_topology(self):
