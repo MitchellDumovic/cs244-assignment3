@@ -64,7 +64,8 @@ class DCellSwitch (object):
 
   
   def getMac(self):
-    return ':'.join([self.dpid[i:i + 2] for i in range(0, 12, 2)])
+    blocks = [self.dpid[i:i+2] for i in range(2, 12, 2)]
+    return '02:' + ':'.join(blocks)
 
   def install(self, dest_mac, port):
     msg = of.ofp_flow_mod()
@@ -99,6 +100,7 @@ class DCellSwitch (object):
       log.warning("Ignoring incomplete packet")
       return
 
+    # print "packetin", packet.src, packet.dst, self.dpid
     packet_in = event.ofp # The actual ofp_packet_in message.
 
     # Comment out the following line and uncomment the one after
@@ -154,21 +156,25 @@ class dcell_routing (object):
       for dst in switches:
         if (dst.startswith('00')):
           continue
-        if src == dst:
-          continue
         self.DCellRouting(src, dst, paths)
     
     # Install flow table entries for all switch-switch flows
     for (src, dest), path in paths.items():
+      print "path:", src, dest, [s.dpid for s in path]
       dest_switch = switches[dest]
-      prev_switch = switches[src]
+      prev_switch = None
       for switch in path:
-        if switch == prev_switch:
+	if prev_switch is None:
+          prev_switch = switch
           continue
-          # get port from prev_switch going to switch
+        # get port from prev_switch going to switch
         port = self.get_port(prev_switch, switch)
+        print prev_switch.dpid, switch.dpid, port
         prev_switch.install(dest_switch.getMac(), port)
         prev_switch = switch
+      prev_switch.install(dest_switch.getMac(), 1)
+
+    print 'done'
 
   def get_port(self, switch1, switch2):
     isMaster1 = switch1.dpid.startswith('00')
@@ -179,6 +185,7 @@ class dcell_routing (object):
     if isMaster1:
       return int(toList(switch2.dpid, self.l)[-1]) + 1
     return 3
+
 
 
   def DCellRouting(self, src, dest, paths):
