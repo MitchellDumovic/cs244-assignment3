@@ -21,6 +21,7 @@ learning switch.
 It's roughly similar to the one Brandon Heller did for NOX.
 """
 
+from pox.lib.addresses import EthAddr
 from pox.lib.util import dpid_to_str
 from pox.core import core
 import pox.openflow.libopenflow_01 as of
@@ -63,7 +64,7 @@ class DCellSwitch (object):
 
   
   def getMac(self):
-    return ':'.join([self.dpid[i:i + 2] for i in range(0, len(self.dpid), 2)])
+    return ':'.join([self.dpid[i:i + 2] for i in range(0, 12, 2)])
 
   def install(self, dest_mac, port):
     msg = of.ofp_flow_mod()
