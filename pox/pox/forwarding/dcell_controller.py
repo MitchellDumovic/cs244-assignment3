@@ -20,6 +20,7 @@ learning switch.
 
 It's roughly similar to the one Brandon Heller did for NOX.
 """
+import pox.lib.packet as pkt
 from pox.lib.packet.ethernet import ethernet
 from pox.lib.packet.arp import arp
 from pox.lib.addresses import EthAddr, IPAddr
@@ -97,10 +98,10 @@ class DCellSwitch (object):
     ip_blocks = ['10',str(int(blocks[0])), str(int(blocks[1])), '0']
     return '.'.join(ip_blocks)
 
-  def install(self, dest_ip, port):
+  def install(self, dest_switch, port):
     msg = of.ofp_flow_mod()
-    match = of.ofp_match(dl_type=0x800, nw_dst=IPAddr(dest_ip))
-    msg.match = match
+    #match = of.ofp_match(dl_type=0x800, nw_dst=IPAddr(dest_ip))
+    msg.match = of.ofp_match(dl_dst = EthAddr(dest_switch.getMac()))
     msg.actions.append(of.ofp_action_output(port=port))
     assert self.connection != None
     self.connection.send(msg)
@@ -123,6 +124,24 @@ class DCellSwitch (object):
 
   def send_arp_reply(self, packet, event):
     # SOURCE: referenced from l3_learning
+    reply = pkt.arp()
+    reply.hwsrc = EthAddr(ipToMac(packet.payload.protodst.toStr()))
+    print reply.hwsrc.toStr()
+    reply.hwdst = packet.src
+    reply.opcode = packet.payload.REPLY
+    reply.protosrc = packet.payload.protodst
+    reply.protodst = packet.payload.protosrc
+    e = pkt.ethernet()
+    e.type = e.ARP_TYPE
+    e.dst = packet.src
+    e.src = reply.hwsrc
+    e.set_payload(reply) 
+    msg = of.ofp_packet_out()
+    msg.data = e.pack()
+    msg.actions.append(of.ofp_action_output(port=of.OFPP_IN_PORT))
+    msg.in_port = event.port
+    event.connection.send(msg)
+    '''
     arp_req = packet.next
     reply = arp()
     # initialize packet
@@ -151,7 +170,7 @@ class DCellSwitch (object):
     msg.actions.append(of.ofp_action_output(port=1))
     msg.in_port = event.port 
     self.connection.send(msg)
-
+    '''
   def _handle_PacketIn (self, event):
     """
     Handles packet in messages from the switch.
@@ -162,7 +181,8 @@ class DCellSwitch (object):
         # send ARP reply
         self.send_arp_reply(packet, event)
         print "sent arp reply to %s" % (packet.src.toStr())
-    
+    if packet.src.toStr().startswith("02") and not packet.dst.toStr().startswith('33'):
+        print packet.src.toStr(), packet.dst.toStr(), dpidToName(self.dpid)    
     #if not packet.parsed:
     #  log.warning("Ignoring incomplete packet")
     #  return
@@ -243,9 +263,9 @@ class dcell_routing (object):
         # get port from prev_switch going to switch
         port = self.get_port(prev_switch, switch)
         #print prev_switch.dpid, switch.dpid, port
-        prev_switch.install(dest_switch.getIP(), port)
+        prev_switch.install(dest_switch, port)
         prev_switch = switch
-      prev_switch.install(dest_switch.getIP(), 1)
+      prev_switch.install(dest_switch, 1)
 
     print 'done'
 
