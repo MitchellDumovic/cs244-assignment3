@@ -62,6 +62,22 @@ class DCellTop (Topo):
 				blocks[i+1] = switchId
 		return ':'.join(blocks)
 
+        # only generates IP addresses for hosts
+        def gen_ip(self, pref, n_type):
+          assert(len(pref)+2 <= 4) # using IPv4
+          ip_addr = ["10"]
+          for switchId in pref:
+            ip_addr.append(switchId)
+          if n_type == "m":
+            ip_addr.append("0")
+          elif n_type== "s":
+            ip_addr.append("1")
+          elif n_type == "h":
+            ip_addr.append("2")
+          blocks_left = 4 - len(ip_addr)
+          ip_addr += ["0"] * blocks_left
+          return ".".join(ip_addr)
+
 	def gen_dpid(self, pref, n_type):
 		return self.gen_mac(pref, n_type).replace(':', '') + "0000"
 
@@ -82,9 +98,9 @@ class DCellTop (Topo):
 				dpidHost = self.gen_dpid(new_pref, 'h')
 				
 				print innerswitch, macSwitch, dpidSwitch
-				print innerhost, macHost, dpidHost
+				print innerhost, macHost, dpidHost, self.gen_ip(new_pref, "h")
 				self.addSwitch(innerswitch, mac=macSwitch, dpid=dpidSwitch)
-				self.addHost(innerhost, mac=macHost, dpid=dpidHost)
+				self.addHost(innerhost, mac=macHost, dpid=dpidHost, ip=self.gen_ip(new_pref, "h"))
 				print "linking %s %s:" % (innerswitch, innerhost)
 				# switch to host is port 1 for both switch and host
 				self.addLink(innerswitch, innerhost, bw=self.bw, port1=1, port2=1)

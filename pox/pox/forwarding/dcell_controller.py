@@ -20,14 +20,15 @@ learning switch.
 
 It's roughly similar to the one Brandon Heller did for NOX.
 """
-
-from pox.lib.addresses import EthAddr
+from pox.lib.packet.ethernet import ethernet
+from pox.lib.packet.arp import arp
+from pox.lib.addresses import EthAddr, IPAddr
 from pox.lib.util import dpid_to_str
 from pox.core import core
 import pox.openflow.libopenflow_01 as of
 import os
 import struct
-
+from pox.lib.packet.ipv4 import ipv4
 log = core.getLogger()
 
 # Switches we know of.  [dpid] -> Switch
@@ -66,6 +67,21 @@ def dpidToName(dpid):
   elif arr[0] == "02":
     return "h" + str(int(arr[1])) + str(int(arr[2]))
 
+def ipToMac(ip):
+  blocks = [format(int(i), "02d") for i in ip.split(".")]
+  assert blocks[0] == "10"
+  mac_blocks = []
+  if blocks[-1] == "00":
+    # master switch
+    mac_blocks.append("00")
+    mac_blocks.append(blocks[1])
+  else:
+    mac_blocks = mac_blocks + [blocks[-1]] + blocks[1:3]
+  mac_blocks = mac_blocks + ["00"]*(6-len(mac_blocks))
+  return ":".join(mac_blocks)
+
+    
+
 class DCellSwitch (object):
   def __init__ (self):
     self.connection = None
@@ -76,9 +92,14 @@ class DCellSwitch (object):
     blocks = [self.dpid[i:i+2] for i in range(2, 12, 2)]
     return '02:' + ':'.join(blocks)
 
-  def install(self, dest_mac, port):
+  def getIP(self):
+    blocks = [self.dpid[i:i+2] for i in range(2, 12, 2)]
+    ip_blocks = ['10',str(int(blocks[0])), str(int(blocks[1])), '0']
+    return '.'.join(ip_blocks)
+
+  def install(self, dest_ip, port):
     msg = of.ofp_flow_mod()
-    match = of.ofp_match(dl_dst=EthAddr(dest_mac))
+    match = of.ofp_match(dl_type=0x800, nw_dst=IPAddr(dest_ip))
     msg.match = match
     msg.actions.append(of.ofp_action_output(port=port))
     assert self.connection != None
@@ -100,24 +121,60 @@ class DCellSwitch (object):
       self.connection.removeListeners(self._listeners)
       self.connection = None
 
+  def send_arp_reply(self, packet, event):
+    # SOURCE: referenced from l3_learning
+    arp_req = packet.next
+    reply = arp()
+    # initialize packet
+    reply.hwtype = arp_req.hwtype
+    reply.prototype = arp_req.prototype
+    reply.hwlen = arp_req.hwlen
+    reply.protolen = arp_req.protolen
+
+    req_ip = arp_req.protodst.toStr()
+    req_mac = ipToMac(req_ip)
+
+    reply.hwsrc = EthAddr(req_mac)# result eth addr
+    reply.hwdst = packet.src # ethaddr of request
+    reply.opcode = arp.REPLY
+    reply.protosrc = arp_req.protodst # IP of requested mac
+    reply.protodst = arp_req.protosrc # IP of the requester
+
+    ether = ethernet()
+    ether.type = ethernet.ARP_TYPE
+    ether.dst = packet.src
+    ether.src = EthAddr(req_mac)
+    ether.set_payload(reply)
+
+    msg = of.ofp_packet_out()
+    msg.data = ether.pack()
+    msg.actions.append(of.ofp_action_output(port=1))
+    msg.in_port = event.port 
+    self.connection.send(msg)
 
   def _handle_PacketIn (self, event):
     """
     Handles packet in messages from the switch.
     """
     packet = event.parsed # This is the parsed packet data.
-    if not packet.parsed:
-      log.warning("Ignoring incomplete packet")
-      return
-
-    if packet.src.toStr().startswith('02') or packet.src.toStr().startswith('01'):
-      print packet.src.toStr(), packet.dst.toStr(), dpidToName(self.dpid)
-
     if packet.type == packet.ARP_TYPE:
-      print "ARP"
+      if packet.payload.opcode == arp.REQUEST:
+        # send ARP reply
+        self.send_arp_reply(packet, event)
+        print "sent arp reply to %s" % (packet.src.toStr())
+    
+    #if not packet.parsed:
+    #  log.warning("Ignoring incomplete packet")
+    #  return
+
+    #if packet.src.toStr().startswith('02') or packet.src.toStr().startswith('01'):
+    #  print packet.src.toStr(), packet.dst.toStr(), dpidToName(self.dpid), packet.
+
+    #if packet.type == packet.ARP_TYPE:
+    #  print "ARP"
 
     # print "packetin", packet.src, packet.dst, self.dpid
-    packet_in = event.ofp # The actual ofp_packet_in message.
+    #packet_in = event.ofp # The actual ofp_packet_in message.
 
     # Comment out the following line and uncomment the one after
     # when starting the exercise.
@@ -136,7 +193,7 @@ class dcell_routing (object):
     self.switchCounter = 0
 
   def _handle_ConnectionUp (self, event):
-    print event.connection.dpid, struct.pack('>q', event.connection.dpid).encode("hex")
+    #print event.connection.dpid, struct.pack('>q', event.connection.dpid).encode("hex")
     
     dpidFormatted = struct.pack('>q', event.connection.dpid).encode('hex')
     log.info("Connection %s" % (event.connection,))
@@ -186,9 +243,9 @@ class dcell_routing (object):
         # get port from prev_switch going to switch
         port = self.get_port(prev_switch, switch)
         #print prev_switch.dpid, switch.dpid, port
-        prev_switch.install(dest_switch.getMac(), port)
+        prev_switch.install(dest_switch.getIP(), port)
         prev_switch = switch
-      prev_switch.install(dest_switch.getMac(), 1)
+      prev_switch.install(dest_switch.getIP(), 1)
 
     print 'done'
 
