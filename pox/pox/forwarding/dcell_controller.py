@@ -21,10 +21,7 @@ learning switch.
 It's roughly similar to the one Brandon Heller did for NOX.
 """
 import pox.lib.packet as pkt
-from pox.lib.packet.ethernet import ethernet
-from pox.lib.packet.arp import arp
 from pox.lib.addresses import EthAddr, IPAddr
-from pox.lib.util import dpid_to_str
 from pox.core import core
 import pox.openflow.libopenflow_01 as of
 import os
@@ -124,53 +121,31 @@ class DCellSwitch (object):
 
   def send_arp_reply(self, packet, event):
     # SOURCE: referenced from l3_learning
-    reply = pkt.arp()
-    reply.hwsrc = EthAddr(ipToMac(packet.payload.protodst.toStr()))
-    print reply.hwsrc.toStr()
-    reply.hwdst = packet.src
-    reply.opcode = packet.payload.REPLY
-    reply.protosrc = packet.payload.protodst
-    reply.protodst = packet.payload.protosrc
-    e = pkt.ethernet()
+    arp_request = packet.payload
+    requested_ip = arp_request.protodst.toStr()
+    hardware_answer = EthAddr(ipToMac(requested_ip))
+
+    # generate an arp packet
+    arp_reply = pkt.arp()
+    arp_reply.opcode = arp_request.REPLY
+    # IP addrs are just flipped
+    arp_reply.protosrc = arp_request.protodst 
+    arp_reply.protodst = arp_request.protosrc
+    arp_reply.hwdst = packet.src # hardware dest is the requester's eth
+    arp_reply.hwsrc = hardware_answer # hardware src is the mac answer
+
+    #encapsulate this in an ethernet packet
+    e = pkt.ethernet(dst=packet.src, src=hardware_answer)
     e.type = e.ARP_TYPE
-    e.dst = packet.src
-    e.src = reply.hwsrc
-    e.set_payload(reply) 
+    e.set_payload(arp_reply)
+
+    #send this packet
     msg = of.ofp_packet_out()
     msg.data = e.pack()
     msg.actions.append(of.ofp_action_output(port=of.OFPP_IN_PORT))
     msg.in_port = event.port
-    event.connection.send(msg)
-    '''
-    arp_req = packet.next
-    reply = arp()
-    # initialize packet
-    reply.hwtype = arp_req.hwtype
-    reply.prototype = arp_req.prototype
-    reply.hwlen = arp_req.hwlen
-    reply.protolen = arp_req.protolen
-
-    req_ip = arp_req.protodst.toStr()
-    req_mac = ipToMac(req_ip)
-
-    reply.hwsrc = EthAddr(req_mac)# result eth addr
-    reply.hwdst = packet.src # ethaddr of request
-    reply.opcode = arp.REPLY
-    reply.protosrc = arp_req.protodst # IP of requested mac
-    reply.protodst = arp_req.protosrc # IP of the requester
-
-    ether = ethernet()
-    ether.type = ethernet.ARP_TYPE
-    ether.dst = packet.src
-    ether.src = EthAddr(req_mac)
-    ether.set_payload(reply)
-
-    msg = of.ofp_packet_out()
-    msg.data = ether.pack()
-    msg.actions.append(of.ofp_action_output(port=1))
-    msg.in_port = event.port 
     self.connection.send(msg)
-    '''
+
   def _handle_PacketIn (self, event):
     """
     Handles packet in messages from the switch.
@@ -181,23 +156,8 @@ class DCellSwitch (object):
         # send ARP reply
         self.send_arp_reply(packet, event)
         print "sent arp reply to %s" % (packet.src.toStr())
-    if packet.src.toStr().startswith("02") and not packet.dst.toStr().startswith('33'):
-        print packet.src.toStr(), packet.dst.toStr(), dpidToName(self.dpid)    
-    #if not packet.parsed:
-    #  log.warning("Ignoring incomplete packet")
-    #  return
 
-    #if packet.src.toStr().startswith('02') or packet.src.toStr().startswith('01'):
-    #  print packet.src.toStr(), packet.dst.toStr(), dpidToName(self.dpid), packet.
 
-    #if packet.type == packet.ARP_TYPE:
-    #  print "ARP"
-
-    # print "packetin", packet.src, packet.dst, self.dpid
-    #packet_in = event.ofp # The actual ofp_packet_in message.
-
-    # Comment out the following line and uncomment the one after
-    # when starting the exercise.
 
   def _handle_ConnectionDown (self, event):
     self.disconnect()
