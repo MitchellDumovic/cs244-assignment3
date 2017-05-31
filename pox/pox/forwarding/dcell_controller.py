@@ -57,6 +57,15 @@ def fromList(arr):
       result += "00"
   return result
 
+def dpidToName(dpid):
+  arr = [dpid[i:i + 2] for i in range(0, len(dpid), 2)]
+  if arr[0] == "00":
+    return "m" + str(int(arr[1]))
+  if arr[0] == "01":
+    return "s" + str(int(arr[1])) + str(int(arr[2]))
+  elif arr[0] == "02":
+    return "h" + str(int(arr[1])) + str(int(arr[2]))
+
 class DCellSwitch (object):
   def __init__ (self):
     self.connection = None
@@ -82,6 +91,7 @@ class DCellSwitch (object):
     assert(self.dpid == dpid)
     self.connection = connection
     connection.addListeners(self)
+    connection.send(of.ofp_flow_mod(match=of.ofp_match(),command=of.OFPFC_DELETE))
     log.info("Connect %s" % (connection,))
 
   def disconnect (self):
@@ -99,6 +109,12 @@ class DCellSwitch (object):
     if not packet.parsed:
       log.warning("Ignoring incomplete packet")
       return
+
+    if packet.src.toStr().startswith('02') or packet.src.toStr().startswith('01'):
+      print packet.src.toStr(), packet.dst.toStr(), dpidToName(self.dpid)
+
+    if packet.type == packet.ARP_TYPE:
+      print "ARP"
 
     # print "packetin", packet.src, packet.dst, self.dpid
     packet_in = event.ofp # The actual ofp_packet_in message.
@@ -144,7 +160,7 @@ class dcell_routing (object):
       if self.switchCounter == self.numSwitches:
         self.installAllPaths()
     else:
-      log.warning("Reconnecting. DPID = " + str(dpidFormatted) + ", switchCounter = " + self.switchCounter)
+      log.warning("Reconnecting. DPID = " + str(dpidFormatted) + ", switchCounter = " + str(self.switchCounter))
       sw.connect(event.connection, dpidFormatted)
 
   def installAllPaths(self):
@@ -160,7 +176,7 @@ class dcell_routing (object):
     
     # Install flow table entries for all switch-switch flows
     for (src, dest), path in paths.items():
-      print "path:", src, dest, [s.dpid for s in path]
+      #print "path:", dpidToName(src), dpidToName(dest), [dpidToName(s.dpid) for s in path]
       dest_switch = switches[dest]
       prev_switch = None
       for switch in path:
@@ -169,7 +185,7 @@ class dcell_routing (object):
           continue
         # get port from prev_switch going to switch
         port = self.get_port(prev_switch, switch)
-        print prev_switch.dpid, switch.dpid, port
+        #print prev_switch.dpid, switch.dpid, port
         prev_switch.install(dest_switch.getMac(), port)
         prev_switch = switch
       prev_switch.install(dest_switch.getMac(), 1)
@@ -198,7 +214,7 @@ class dcell_routing (object):
     if (m == self.l):
       dcellpath = self.findPathInSameDCell(src, dest)
       paths[(src, dest)] = dcellpath
-      paths[(dest, src)] = dcellpath
+      paths[(dest, src)] = dcellpath[::-1]
       return dcellpath
 
 
@@ -208,7 +224,7 @@ class dcell_routing (object):
 
     path = path1 + path2
     paths[(src, dest)] = path
-    paths[(dest, src)] = path
+    paths[(dest, src)] = path[::-1]
 
   def findPathInSameDCell(self, src, dst):
     srcSwitch = switches[src]
