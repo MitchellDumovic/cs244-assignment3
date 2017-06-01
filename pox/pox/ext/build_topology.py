@@ -103,7 +103,7 @@ def start_iperf(net, name1, name2):
 	server = h2.popen("iperf -s")
 	output_file = "./%s_%s_iperf.txt" % (name1, name2)
 	
-	iperf_cmd = "iperf -c %s -t %d > %s -i 1" % (h2.IP(), 10, output_file)
+	iperf_cmd = "iperf -c %s -t %d > %s -i 1" % (h2.IP(), 30, output_file)
 	
 	client = h1.popen(iperf_cmd, shell=True)
 
@@ -120,12 +120,16 @@ def main():
 	start_time = time()
 	start_iperf(net, "h00", "h43")
 
+	link_destroyed = False
 	while True:
 		sleep(5)
 		now = time()
 		delta = now - start_time
-		if delta > 15:
-			break	
+		if delta > 15 and not link_destroyed:
+			net.delLinkBetween("s03", "s40")
+			link_destroyed = True
+		if delta > 30:
+			break
 	net.stop()
 
 if __name__ == "__main__":

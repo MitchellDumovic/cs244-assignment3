@@ -40,7 +40,9 @@ xaxis = map(float, col(0, data))
 throughputs = map(float, col(1, data))
 ax.plot(xaxis, throughputs, lw=2)
 ax.xaxis.set_major_locator(MaxNLocator(4))
-
+axes = plt.gca()
+axes.set_ylim([0, 100])
+plt.xlabel("Time (seconds)")
 plt.ylabel("Throughput (Mbits/sec)")
 plt.grid(True)
 
