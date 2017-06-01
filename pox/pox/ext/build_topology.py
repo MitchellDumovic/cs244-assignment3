@@ -115,11 +115,13 @@ def add_link(net, name1, name2):
 	net.configLinkStatus(name1, name2, "up")
 
 # return array of pair of names for links connected to given node
+# master to switch is always the last link given
 def get_links(net, name):
 	node = net.get(name)
         interface_list = node.intfList()
         links = [i.link for i in interface_list]
         link_names = []
+	master_pair = None
         for l in links:
                 if l is None: continue
                 l_str = l.__str__()
@@ -129,7 +131,12 @@ def get_links(net, name):
                 l2 = split[1]
                 n1 = l1.split('-')[0]
                 n2 = l2.split('-')[0]
-                link_names.append((n1, n2))
+		if n1[0] == "m" or n2[0] == "m":
+			master_pair = (n1, n2)
+		else:
+                	link_names.append((n1, n2))
+	assert master_pair is not None
+	link_names.append(master_pair)
 	return link_names
 
 # to stop a server we just disconnect all of the links around it
