@@ -8,6 +8,8 @@ from mininet.node import Controller
 from mininet.node import RemoteController
 from mininet.util import dumpNodeConnections
 from mininet.cli import CLI
+sys.path.append("../../")
+from pox.ext.id_generator import SwitchIDGenerator
 	
 topo_id_gen = SwitchIDGenerator()
 class DCellTop (Topo):
@@ -69,8 +71,9 @@ class DCellTop (Topo):
 				topo_id_gen.ingestByName(innerhost)
 				macHost = topo_id_gen.getMac()
 				dpidHost = topo_id_gen.getDPID()
-				print innerhost, macHost, dpidHost, self.gen_ip(new_pref, "h")
-				self.addHost(innerhost, mac=macHost, dpid=dpidHost, ip=self.gen_ip(new_pref, "h"))
+				ipHost = topo_id_gen.getIP()
+				print innerhost, macHost, dpidHost, ipHost
+				self.addHost(innerhost, mac=macHost, dpid=dpidHost, ip=ipHost)
 				
 				print "linking %s %s:" % (innerswitch, innerhost)
 				# switch to host is port 1 for both switch and host
