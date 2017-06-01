@@ -20,6 +20,7 @@ learning switch.
 
 It's roughly similar to the one Brandon Heller did for NOX.
 """
+from pox.lib.packet.arp import arp
 import pox.lib.packet as pkt
 from pox.lib.addresses import EthAddr, IPAddr
 from pox.core import core

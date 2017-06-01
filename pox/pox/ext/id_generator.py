@@ -1,10 +1,11 @@
-from pox.ext.dcell_constants import N, L,
+from pox.ext.dcell_constants import N, L
 class SwitchIDGenerator:
   HOST = "h"
   SWITCH = "s"
   MASTER = "m"
   def __init__ (self):
     self.clear()
+
 
   def getIDSeq(self):
     return self.id_seq[:]
@@ -18,13 +19,13 @@ class SwitchIDGenerator:
     self.clear()
     blocks = mac.split(":")
     if blocks[0] == "00":
-      self.switch_type = MASTER
+      self.switch_type = self.MASTER
     elif blocks[0] == "01":
-      self.switch_type = SWITCH
+      self.switch_type = self.SWITCH
     elif blocks[0] == "02":
-      self.switch_type = HOST
+      self.switch_type = self.HOST
 
-    if self.switch_type == MASTER:
+    if self.switch_type == self.MASTER:
       self.id_seq = [str(int(i)) for i in blocks[1:L+1]]
     else:
       self.id_seq = [str(int(i)) for i in blocks[1:L+2]]
@@ -43,11 +44,11 @@ class SwitchIDGenerator:
     #10.<id1>.<id2>.<type>
     blocks = ip.split(".")
     if blocks[-1] == "0":
-      self.switch_type = MASTER
+      self.switch_type = self.MASTER
     elif blocks[-1] == "1":
-      self.switch_type = SWITCH
-    elif blocks[-1] == "2"
-      self.switch_type = HOST
+      self.switch_type = self.SWITCH
+    elif blocks[-1] == "2":
+      self.switch_type = self.HOST
     self.id_seq = blocks[1:3]
     self.filled = True
 
@@ -60,15 +61,15 @@ class SwitchIDGenerator:
   def getMac(self):
     assert(self.filled)
     blocks = ["00" for i in range(6)]
-    if self.switch_type == MASTER:
+    if self.switch_type == self.MASTER:
       blocks[0] = "00"
-    elif self.switch_type == SWITCH:
+    elif self.switch_type == self.SWITCH:
       blocks[0] = "01"
-    elif self.switch_type == HOST:
+    elif self.switch_type == self.HOST:
       blocks[0] = "02"
 
     for i, switchID in enumerate(self.id_seq):
-      blocks[i+1] = format(switchID, "02d")
+      blocks[i+1] = format(int(switchID), "02d")
 
     return ':'.join(blocks)
 
@@ -77,9 +78,9 @@ class SwitchIDGenerator:
     ip.append("10")
     for switchID in self.id_seq:
       ip.append(switchID)
-    if self.switch_type == MASTER: ip.append("0")
-    elif self.switch_type == SWITCH: ip.append("1")
-    elif self.switch_type == HOST: ip.append("2")
+    if self.switch_type == self.MASTER: ip.append("0")
+    elif self.switch_type == self.SWITCH: ip.append("1")
+    elif self.switch_type == self.HOST: ip.append("2")
     assert(len(ip) == 4)
     return ".".join(ip)
 
