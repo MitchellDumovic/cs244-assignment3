@@ -1,0 +1,3 @@
+N=4
+L=1
+NUM_SWITCHES = 25

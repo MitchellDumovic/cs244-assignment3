@@ -46,6 +46,7 @@ class DCellTop (Topo):
 	def gen_name(self, pref, n_type):	
 		node_id = "%s%s" % (n_type, ''.join(pref))
 		return node_id
+		
 	def gen_mac(self, pref, n_type):
 		assert(len(pref) + 1 < 6)
 		blocks = ["00" for i in range(6)]
