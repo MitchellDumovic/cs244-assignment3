@@ -10,14 +10,14 @@ from mininet.util import dumpNodeConnections
 from mininet.cli import CLI
 sys.path.append("../../")
 from pox.ext.id_generator import SwitchIDGenerator
-	
+from time import sleep, time
 topo_id_gen = SwitchIDGenerator()
 class DCellTop (Topo):
 	
 	def build(self, n=4, l=1):
 		print n
 		print l
-		self.bw = 1.5
+		self.bw = 100
 		self.delay = 5
 		self.time = 200
 		self.find_t_k(n, l)
@@ -94,6 +94,19 @@ class DCellTop (Topo):
 					print "linking %s %s:" % (n1, n2)
 
 
+def start_iperf(net, name1, name2):
+	h1 = net.get(name1)
+	h2 = net.get(name2)
+
+	print "Starting iperf server..."
+	
+	server = h2.popen("iperf -s")
+	output_file = "./%s_%s_iperf.txt" % (name1, name2)
+	
+	iperf_cmd = "iperf -c %s -t %d > %s -i 1" % (h2.IP(), 10, output_file)
+	
+	client = h1.popen(iperf_cmd, shell=True)
+
 def main():
 	assert len(sys.argv) == 3
 	n = int(sys.argv[1])
@@ -103,8 +116,16 @@ def main():
         net.start()
 
 	CLI(net)
-	dumpNodeConnections(net.hosts)
-	net.pingAllFull()
+		
+	start_time = time()
+	start_iperf(net, "h00", "h43")
+
+	while True:
+		sleep(5)
+		now = time()
+		delta = now - start_time
+		if delta > 15:
+			break	
 	net.stop()
 
 if __name__ == "__main__":
