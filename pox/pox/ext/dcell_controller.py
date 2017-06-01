@@ -36,45 +36,21 @@ log = core.getLogger()
 # Switches we know of.  [dpid] -> Switch
 switches = {}
 
-id_gen = SwitchIDGenerator()
-
-def dpidToName(dpid):
-  arr = [dpid[i:i + 2] for i in range(0, len(dpid), 2)]
-  if arr[0] == "00":
-    return "m" + str(int(arr[1]))
-  if arr[0] == "01":
-    return "s" + str(int(arr[1])) + str(int(arr[2]))
-  elif arr[0] == "02":
-    return "h" + str(int(arr[1])) + str(int(arr[2]))
-
-def ipToMac(ip):
-  blocks = [format(int(i), "02d") for i in ip.split(".")]
-  assert blocks[0] == "10"
-  mac_blocks = []
-  if blocks[-1] == "00":
-    # master switch
-    mac_blocks.append("00")
-    mac_blocks.append(blocks[1])
-  else:
-    mac_blocks = mac_blocks + [blocks[-1]] + blocks[1:3]
-  mac_blocks = mac_blocks + ["00"]*(6-len(mac_blocks))
-  return ":".join(mac_blocks)
-
-    
 
 class DCellSwitch (object):
   def __init__ (self):
     self.connection = None
     self.dpid = None
     self._listeners = None
+    self.id_gen = SwitchIDGenerator()
 
   def getHostMac(self):
     assert self.dpid is not None
     # ingest switch's dpid
-    id_gen.ingestByDpid(self.dpid)
-    assert id_gen.switch_type == id_gen.SWITCH
-    id_gen.switch_type = id_gen.HOST
-    return id_gen.getMac()
+    self.id_gen.ingestByDpid(self.dpid)
+    assert self.id_gen.switch_type == self.id_gen.SWITCH
+    self.id_gen.switch_type = self.id_gen.HOST
+    return self.id_gen.getMac()
 
   def install(self, dest_switch, port):
     assert self.connection is not None
@@ -105,8 +81,8 @@ class DCellSwitch (object):
     arp_request = packet.payload
     requested_ip = arp_request.protodst.toStr()
     # get eth answer to arp request
-    id_gen.ingestByIP(requested_ip)
-    mac_str = id_gen.getMac()
+    self.id_gen.ingestByIP(requested_ip)
+    mac_str = self.id_gen.getMac()
     hardware_answer = EthAddr(mac_str)
 
     # generate an arp packet
@@ -145,9 +121,10 @@ class DCellSwitch (object):
     self.disconnect()
 
 class dcell_routing (object):
-  def __init__ (self, numSwitches):
+  def __init__ (self):
     core.openflow.addListeners(self)
     self.switchCounter = 0
+    self.id_gen = SwitchIDGenerator()
 
   def _handle_ConnectionUp (self, event):    
     dpidFormatted = struct.pack('>q', event.connection.dpid).encode('hex')
@@ -171,11 +148,11 @@ class dcell_routing (object):
     paths = {}
     # by formatted dpids
     for src in switches:
-      id_gen.ingestByDpid(src)
-      if id_gen.switch_type == id_gen.MASTER: continue # continue if master
+      self.id_gen.ingestByDpid(src)
+      if self.id_gen.switch_type == self.id_gen.MASTER: continue # continue if master
       for dst in switches:
-        id_gen.ingestByDpid(dst)
-        if id_gen.switch_type == id_gen.MASTER: continue
+        self.id_gen.ingestByDpid(dst)
+        if self.id_gen.switch_type == self.id_gen.MASTER: continue
         self.DCellRouting(src, dst, paths)
     
     # Install flow table entries for all switch-switch flows
@@ -195,18 +172,18 @@ class dcell_routing (object):
     print 'done'
 
   def get_port(self, switch1, switch2):
-    id_gen.ingestByDpid(switch1.dpid)
-    isMaster1 = id_gen.switch_type == id_gen.MASTER
-    id_gen.ingestByDpid(switch2.dpid)
-    isMaster2 = id_gen.switch_type == id_gen.MASTER
+    self.id_gen.ingestByDpid(switch1.dpid)
+    isMaster1 = self.id_gen.switch_type == self.id_gen.MASTER
+    self.id_gen.ingestByDpid(switch2.dpid)
+    isMaster2 = self.id_gen.switch_type == self.id_gen.MASTER
 
     assert(not (isMaster1 and isMaster2))
     if isMaster2:
       return 2
     if isMaster1:
-      id_gen.ingestByDpid(switch2.dpid)
+      self.id_gen.ingestByDpid(switch2.dpid)
       # the port is the last number in the switch
-      return int(id_gen.getIDSeq()[-1]) + 1
+      return int(self.id_gen.getIDSeq()[-1]) + 1
     return 3
 
   def DCellRouting(self, src, dest, paths):
@@ -215,10 +192,10 @@ class dcell_routing (object):
     if src == dest:
       return [switches[src]]
 
-    id_gen.ingestByDpid(src)
-    src_list = id_gen.getIDSeq()
-    id_gen.ingestByDpid(dest)
-    dest_list = id_gen.getIDSeq()
+    self.id_gen.ingestByDpid(src)
+    src_list = self.id_gen.getIDSeq()
+    self.id_gen.ingestByDpid(dest)
+    dest_list = self.id_gen.getIDSeq()
 
     pref = os.path.commonprefix([src_list, dest_list])
     m = len(pref)
@@ -241,10 +218,10 @@ class dcell_routing (object):
     srcSwitch = switches[src]
     destSwitch = switches[dst]
 
-    id_gen.ingestByDpid(src)
-    master_name = "m" + ''.join(id_gen.getIDSeq()[:L])
-    id_gen.ingestByName(master_name)
-    masterDpid = id_gen.getDPID()
+    self.id_gen.ingestByDpid(src)
+    master_name = "m" + ''.join(self.id_gen.getIDSeq()[:L])
+    self.id_gen.ingestByName(master_name)
+    masterDpid = self.id_gen.getDPID()
     assert(masterDpid in switches)
     masterSwitch = switches[masterDpid]
     return [srcSwitch, masterSwitch, destSwitch]
@@ -256,12 +233,12 @@ class dcell_routing (object):
 
     n1Target = (d - 1) % N
     n1Name = "s" + str(s) + str(n1Target)
-    id_gen.ingestByName(n1Name)
-    n1Dpid = id_gen.getDPID()
+    self.id_gen.ingestByName(n1Name)
+    n1Dpid = self.id_gen.getDPID()
 
     n2Name = "s" + str(d) + str(s)
-    id_gen.ingestByName(n2Name)
-    n2Dpid = id_gen.getDPID()
+    self.id_gen.ingestByName(n2Name)
+    n2Dpid = self.id_gen.getDPID()
 
     if (s == int(cellId1)):
       return (n1Dpid, n2Dpid)
@@ -272,4 +249,4 @@ def launch ():
   """
   Starts the component
   """
-  core.registerNew(dcell_routing, 25)
+  core.registerNew(dcell_routing)

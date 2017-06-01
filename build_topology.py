@@ -9,7 +9,7 @@ from mininet.node import RemoteController
 from mininet.util import dumpNodeConnections
 from mininet.cli import CLI
 	
-
+topo_id_gen = SwitchIDGenerator()
 class DCellTop (Topo):
 	
 	def build(self, n=4, l=1):
@@ -46,62 +46,32 @@ class DCellTop (Topo):
 	def gen_name(self, pref, n_type):	
 		node_id = "%s%s" % (n_type, ''.join(pref))
 		return node_id
-		
-	def gen_mac(self, pref, n_type):
-		assert(len(pref) + 1 < 6)
-		blocks = ["00" for i in range(6)]
-		firstBlock = "00"
-		if n_type == "s":
-			blocks[0] = "01"
-		elif n_type == "h":
-			blocks[0] = "02"
-		for i, switchId in enumerate(pref):
-			assert(len(switchId) < 3)
-			if (len(switchId) == 1):
-				blocks[i+1] = "0" + switchId
-			else:
-				blocks[i+1] = switchId
-		return ':'.join(blocks)
-
-        # only generates IP addresses for hosts
-        def gen_ip(self, pref, n_type):
-          assert(len(pref)+2 <= 4) # using IPv4
-          ip_addr = ["10"]
-          for switchId in pref:
-            ip_addr.append(switchId)
-          if n_type == "m":
-            ip_addr.append("0")
-          elif n_type== "s":
-            ip_addr.append("1")
-          elif n_type == "h":
-            ip_addr.append("2")
-          blocks_left = 4 - len(ip_addr)
-          ip_addr += ["0"] * blocks_left
-          return ".".join(ip_addr)
-
-	def gen_dpid(self, pref, n_type):
-		return self.gen_mac(pref, n_type).replace(':', '') + "0000"
 
 	def build_topology(self, pref, n, l):
 		if l == 0:
 			masterswitch = self.gen_name(pref, "m")
-			macMaster = self.gen_mac(pref, "m")
-			dpidMaster = self.gen_dpid(pref, 'm')
+			topo_id_gen.ingestByName(masterswitch)
+			macMaster = topo_id_gen.getMac()
+			dpidMaster = topo_id_gen.getDPID()
 			self.addSwitch(masterswitch, mac=macMaster, dpid=dpidMaster)
 			print masterswitch, macMaster, dpidMaster
 			for i in range(0, n):
 				new_pref = pref + [str(i)]
+
 				innerswitch = self.gen_name(new_pref, "s")
-				innerhost = self.gen_name(new_pref, "h")
-				macSwitch = self.gen_mac(new_pref, "s")
-				macHost = self.gen_mac(new_pref, "h")
-				dpidSwitch = self.gen_dpid(new_pref, 's')
-				dpidHost = self.gen_dpid(new_pref, 'h')
-				
+				topo_id_gen.ingestByName(innerswitch)
+				macSwitch = topo_id_gen.getMac()
+				dpidSwitch = topo_id_gen.getDPID()
 				print innerswitch, macSwitch, dpidSwitch
-				print innerhost, macHost, dpidHost, self.gen_ip(new_pref, "h")
 				self.addSwitch(innerswitch, mac=macSwitch, dpid=dpidSwitch)
+
+				innerhost = self.gen_name(new_pref, "h")
+				topo_id_gen.ingestByName(innerhost)
+				macHost = topo_id_gen.getMac()
+				dpidHost = topo_id_gen.getDPID()
+				print innerhost, macHost, dpidHost, self.gen_ip(new_pref, "h")
 				self.addHost(innerhost, mac=macHost, dpid=dpidHost, ip=self.gen_ip(new_pref, "h"))
+				
 				print "linking %s %s:" % (innerswitch, innerhost)
 				# switch to host is port 1 for both switch and host
 				self.addLink(innerswitch, innerhost, bw=self.bw, port1=1, port2=1)
@@ -120,18 +90,6 @@ class DCellTop (Topo):
 					self.addLink(n1, n2, bw=self.bw, port1=3, port2=3)
 					print "linking %s %s:" % (n1, n2)
 
-	def build_trivial_topology(self):
-		# to test controller
-		# h1 -> s1 -> s2 -> s3 -> h2
-		h1 = self.addHost('h1', mac="00:00:00:00:00:11")
-                h2 = self.addHost('h2', mac="00:00:00:00:22:00")
-                s1 = self.addSwitch('s1', mac="00:00:00:33:00:00")
-                s2 = self.addSwitch('s2', mac="00:00:44:00:00:00")
-                s3 = self.addSwitch('s3', mac="00:55:00:00:00:00")
-                self.addLink(h1, s1)
-		self.addLink(s1, s2)
-                self.addLink(s2, s3)
-                self.addLink(s3, h2)
 
 def main():
 	assert len(sys.argv) == 3
@@ -140,10 +98,8 @@ def main():
 	topo = DCellTop(n, l)
 	net = Mininet(topo=topo, host=CPULimitedHost, link = TCLink, controller=RemoteController)
         net.start()
-	
 
 	CLI(net)
-
 	dumpNodeConnections(net.hosts)
 	net.pingAllFull()
 	net.stop()

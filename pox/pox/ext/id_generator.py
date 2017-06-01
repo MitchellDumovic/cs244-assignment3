@@ -6,7 +6,6 @@ class SwitchIDGenerator:
   def __init__ (self):
     self.clear()
 
-
   def getIDSeq(self):
     return self.id_seq[:]
 
