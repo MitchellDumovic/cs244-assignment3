@@ -94,23 +94,35 @@ class DCellTop (Topo):
 					print "linking %s %s:" % (n1, n2)
 
 
-def start_iperf(net, name1, name2):
+def start_iperf(net, name1, name2, duration):
 	h1 = net.get(name1)
 	h2 = net.get(name2)
 
 	print "Starting iperf server..."
 	
-	server = h2.popen("iperf -s")
+	server = h2.popen("iperf -s -w 16m")
 	output_file = "./%s_%s_iperf.txt" % (name1, name2)
 	
-	iperf_cmd = "iperf -c %s -t %d > %s -i 1" % (h2.IP(), 30, output_file)
+	iperf_cmd = "iperf -c %s -t %d > %s -i 1" % (h2.IP(), duration, output_file)
 	
 	client = h1.popen(iperf_cmd, shell=True)
+
+# return the link that was dropped
+def drop_link(net, name1, name2):
+	net.configLinkStatus(name1, name2, "down")
+
+def add_link(net, name1, name2):
+	net.configLinkStatus(name1, name2, "up")
 
 def main():
 	assert len(sys.argv) == 3
 	n = int(sys.argv[1])
 	l = int(sys.argv[2])
+
+	iperf_duration = 15
+	drop_link_time = 3
+	pick_up_link_time = 7
+
 	topo = DCellTop(n, l)
 	net = Mininet(topo=topo, host=CPULimitedHost, link = TCLink, controller=RemoteController)
         net.start()
@@ -118,17 +130,20 @@ def main():
 	CLI(net)
 		
 	start_time = time()
-	start_iperf(net, "h00", "h43")
+	start_iperf(net, "h00", "h43", iperf_duration)
 
-	link_destroyed = False
+	link_status = 0 # 0 if begin, 1 if dropped, 2 if picked up again
 	while True:
 		sleep(5)
 		now = time()
 		delta = now - start_time
-		if delta > 15 and not link_destroyed:
-			net.delLinkBetween("s03", "s40")
-			link_destroyed = True
-		if delta > 30:
+		if delta > drop_link_time and link_status == 0:
+			drop_link(net, "s03", "s40")
+			link_status = 1
+		if delta > pick_up_link_time and link_status == 1:
+			add_link(net, "s03", "s40")
+			link_status = 2
+		if delta > iperf_duration + 5:
 			break
 	net.stop()
 

@@ -115,7 +115,7 @@ class DCellSwitch (object):
       if packet.payload.opcode == arp.REQUEST:
         # send ARP reply
         self.send_arp_reply(event)
-        print "sent arp reply to %s" % (packet.src.toStr())
+        #print "sent arp reply to %s" % (packet.src.toStr())
 
   def _handle_ConnectionDown (self, event):
     self.disconnect()
