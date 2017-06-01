@@ -109,7 +109,7 @@ class DCellSwitch (object):
   def _handle_PortStatus(self, event):
     self.id_gen.ingestByDpid(self.dpid)
     curr_switch_name = self.id_gen.getName()
-
+    print event.modified, event.added, event.deleted, event.ofp.desc.state, curr_switch_name
     if event.modified and event.ofp.desc.state == 1:
 	# dropped
         print "dropped", event.port, curr_switch_name
@@ -133,10 +133,7 @@ class DCellSwitch (object):
 
 class dcell_routing (object):
   def __init__ (self):
-    def startup():
-      core.openflow.addListeners(self)
-      core.openflow_discovery.addListeners(self)
-    core.call_when_ready(startup, ('openflow', 'openflow_discovery'))
+    core.openflow.addListeners(self)
     self.switchCounter = 0
     self.id_gen = SwitchIDGenerator()
 
@@ -158,17 +155,6 @@ class dcell_routing (object):
       sw.connect(event.connection, dpidFormatted)
 
 
-  '''
-  def _handle_LinkEvent(self, event):
-    dpid1Formatted = struct.pack('>q', event.link.dpid1).encode('hex')
-    dpid2Formatted = struct.pack('>q', event.link.dpid2).encode('hex')
-
-    self.id_gen.ingestByDpid(dpid1Formatted)
-    s1_name = self.id_gen.getName()
-    self.id_gen.ingestByDpid(dpid2Formatted)
-    s2_name = self.id_gen.getName()
-    print event.removed, s1_name, s2_name
-  '''
   def installAllPaths(self):
     print "Installing all paths"
     paths = {}

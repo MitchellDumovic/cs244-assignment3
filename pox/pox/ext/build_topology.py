@@ -114,37 +114,75 @@ def drop_link(net, name1, name2):
 def add_link(net, name1, name2):
 	net.configLinkStatus(name1, name2, "up")
 
+# return array of pair of names for links connected to given node
+def get_links(net, name):
+	node = net.get(name)
+        interface_list = node.intfList()
+        links = [i.link for i in interface_list]
+        link_names = []
+        for l in links:
+                if l is None: continue
+                l_str = l.__str__()
+                # l_str looks like s03-eth1<->h03-eth1
+                split = l_str.split('<->')
+                l1 = split[0]
+                l2 = split[1]
+                n1 = l1.split('-')[0]
+                n2 = l2.split('-')[0]
+                link_names.append((n1, n2))
+	return link_names
+
+# to stop a server we just disconnect all of the links around it
+def stop_server(net, name):
+	link_names = get_links(net, name)
+	for (name1, name2) in link_names:
+		drop_link(net, name1, name2)
+
+def start_server(net, name):
+	link_names = get_links(net, name)
+	for (name1, name2) in link_names:
+		add_link(net, name1, name2)
+
 def main():
 	assert len(sys.argv) == 3
 	n = int(sys.argv[1])
 	l = int(sys.argv[2])
 
-	iperf_duration = 15
+	iperf_duration = 500
 	drop_link_time = 3
 	pick_up_link_time = 7
+	drop_server_time = 10
+	pick_up_server_time = 13
 
 	topo = DCellTop(n, l)
 	net = Mininet(topo=topo, host=CPULimitedHost, link = TCLink, controller=RemoteController)
         net.start()
-
 	CLI(net)
-		
+	net.pingAll()	
 	start_time = time()
 	start_iperf(net, "h00", "h43", iperf_duration)
 
-	link_status = 0 # 0 if begin, 1 if dropped, 2 if picked up again
+	exp_status = 0 # 0 if begin, 1 if link dropped, 2 if link picked up again, 3 if server dropped, 4 if server picked up again
 	while True:
-		sleep(5)
+		sleep(1)
 		now = time()
 		delta = now - start_time
-		if delta > drop_link_time and link_status == 0:
+		if delta > drop_link_time and exp_status == 0:
 			print "dropping link"
 			drop_link(net, "s03", "s40")
-			link_status = 1
-		if delta > pick_up_link_time and link_status == 1:
+			exp_status = 1
+		if delta > pick_up_link_time and exp_status == 1:
 			print "adding link back"
 			add_link(net, "s03", "s40")
-			link_status = 2
+			exp_status = 2
+		if delta > drop_server_time and exp_status == 2:
+			print "dropping server"
+			stop_server(net, "s03")
+			exp_status = 3
+		if delta > pick_up_server_time and exp_status == 3:
+			print "picking up server"
+			start_server(net, "s03")
+			exp_status = 4
 		if delta > iperf_duration + 5:
 			break
 	net.stop()
