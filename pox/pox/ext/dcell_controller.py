@@ -106,6 +106,17 @@ class DCellSwitch (object):
     msg.in_port = event.port
     self.connection.send(msg)
 
+  def _handle_PortStatus(self, event):
+    self.id_gen.ingestByDpid(self.dpid)
+    curr_switch_name = self.id_gen.getName()
+
+    if event.modified and event.ofp.desc.state == 1:
+	# dropped
+        print "dropped", event.port, curr_switch_name
+    if event.modified and event.ofp.desc.state == 0:
+        # reactivated
+        print "reactivated", event.port, curr_switch_name
+
   def _handle_PacketIn (self, event):
     """
     Handles packet in messages from the switch.
@@ -122,7 +133,10 @@ class DCellSwitch (object):
 
 class dcell_routing (object):
   def __init__ (self):
-    core.openflow.addListeners(self)
+    def startup():
+      core.openflow.addListeners(self)
+      core.openflow_discovery.addListeners(self)
+    core.call_when_ready(startup, ('openflow', 'openflow_discovery'))
     self.switchCounter = 0
     self.id_gen = SwitchIDGenerator()
 
@@ -143,6 +157,18 @@ class dcell_routing (object):
       log.warning("Reconnecting. DPID = " + str(dpidFormatted) + ", switchCounter = " + str(self.switchCounter))
       sw.connect(event.connection, dpidFormatted)
 
+
+  '''
+  def _handle_LinkEvent(self, event):
+    dpid1Formatted = struct.pack('>q', event.link.dpid1).encode('hex')
+    dpid2Formatted = struct.pack('>q', event.link.dpid2).encode('hex')
+
+    self.id_gen.ingestByDpid(dpid1Formatted)
+    s1_name = self.id_gen.getName()
+    self.id_gen.ingestByDpid(dpid2Formatted)
+    s2_name = self.id_gen.getName()
+    print event.removed, s1_name, s2_name
+  '''
   def installAllPaths(self):
     print "Installing all paths"
     paths = {}

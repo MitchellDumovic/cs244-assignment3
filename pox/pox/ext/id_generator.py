@@ -85,7 +85,7 @@ class SwitchIDGenerator:
 
   def getName(self):
     assert self.filled
-    return self.switch_type + ''.join(self.seq_id)
+    return self.switch_type + ''.join(self.id_seq)
 
   def getDPID(self):
     mac = self.getMac()

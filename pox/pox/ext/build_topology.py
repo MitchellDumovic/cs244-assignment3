@@ -138,9 +138,11 @@ def main():
 		now = time()
 		delta = now - start_time
 		if delta > drop_link_time and link_status == 0:
+			print "dropping link"
 			drop_link(net, "s03", "s40")
 			link_status = 1
 		if delta > pick_up_link_time and link_status == 1:
+			print "adding link back"
 			add_link(net, "s03", "s40")
 			link_status = 2
 		if delta > iperf_duration + 5:
