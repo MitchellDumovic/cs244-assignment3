@@ -28,7 +28,7 @@ import pox.openflow.libopenflow_01 as of
 import os
 import struct
 from pox.lib.packet.ipv4 import ipv4
-from pox.ext.id_generator import SwitchIDGenerator
+from pox.ext.util import SwitchIDGenerator, GetDCellLink
 from pox.ext.dcell_constants import N, L, NUM_SWITCHES
 
 log = core.getLogger()
@@ -43,6 +43,7 @@ class DCellSwitch (object):
     self.dpid = None
     self._listeners = None
     self.id_gen = SwitchIDGenerator()
+    self.interDCELL_link_failed = False
 
   def getHostMac(self):
     assert self.dpid is not None
@@ -106,16 +107,111 @@ class DCellSwitch (object):
     msg.in_port = event.port
     self.connection.send(msg)
 
+  def GetInterDCellSwitchName(self):
+    # we assume port 3. get the switch on the other side of the link
+    self.id_gen.ingestByDpid(self.dpid)
+    level = int(self.id_gen.getIDSeq()[0])
+    name = self.id_gen.getName()
+    for i in range(0, N+1):
+      if level != i:
+        l = GetDCellLink(level, i)
+        if l[0] == name: return l[1]
+        if l[1] == name: return l[0]
+    # should never hit this point
+    assert False
+    return None
+
+  def getSwitchesInDcell(self, level):
+    dcell_switches = []
+    for i in range(0, N):
+      name = "s" + str(level) + str(i)
+      self.id_gen.ingestByName(name)
+      dcell_switches.append(switches[self.id_gen.getDPID()])
+    return dcell_switches
+    
+  def handleFailedLink(self):
+    self.id_gen.ingestByDpid(self.dpid)
+    our_level = int(self.id_gen.getIDSeq()[0])
+
+    other_side_name = self.GetInterDCellSwitchName()
+    self.id_gen.ingestByName(other_side_name)
+    other_side_level = int(self.id_gen.getIDSeq()[0])
+
+    proxy_level = (other_side_level + 1) % (N+1)
+    if proxy_level == our_level:
+      proxy_level = (our_level + 1) % (N+1)
+
+    (a_name, b_name) = GetDCellLink(our_level, proxy_level)
+    self.id_gen.ingestByName(a_name)
+    a = switches[self.id_gen.getDPID()]    
+
+    destination_switches = self.getSwitchesInDcell(other_side_level) # "B" switches
+    # for each of these dest switches, change flow table to go to master
+    for dest_switch in destination_switches:
+      self.install(dest_switch, 2)
+    # in master, for each dest switch, go to a instead of current switch
+    self.id_gen.ingestByDpid(a.dpid)
+    master_proxy_port = int(self.id_gen.getIDSeq()[1])+1
+    master_switch_name = "m" + str(our_level)
+    self.id_gen.ingestByName(master_switch_name)
+    master_switch = switches[self.id_gen.getDPID()]
+    for dest_switch in destination_switches:
+      master_switch.install(dest_switch, master_proxy_port)
+    # in new proxy (a), for every dest in B, route to proxy on other side (b) rather than back to master
+    for dest_switch in destination_switches:
+      a.install(dest_switch, 3)
+
+  def handleReactivatedLink(self):
+    self.id_gen.ingestByDpid(self.dpid)
+    our_level = int(self.id_gen.getIDSeq()[0])
+    # switch that is now restored
+    other_side_name = self.GetInterDCellSwitchName()
+    self.id_gen.ingestByName(other_side_name)
+    other_side_level = int(self.id_gen.getIDSeq()[0])
+    # current proxy that we need to redirect
+    proxy_level = (other_side_level + 1) % (N+1)
+    if proxy_level == our_level:
+      proxy_level = (our_level + 1) % (N+1)
+
+    (a_name, b_name) = GetDCellLink(our_level, proxy_level)
+    self.id_gen.ingestByName(a_name)
+    a = switches[self.id_gen.getDPID()]
+
+    destination_switches = self.getSwitchesInDcell(other_side_level) # "B" switches
+    # for each of these dest switches, change flow table to go through restored link
+    for dest_switch in destination_switches:
+      self.install(dest_switch, 3)
+    # in master, for each dest switch, go to a instead of current switch
+    self.id_gen.ingestByDpid(self.dpid)
+    master_self_port = int(self.id_gen.getIDSeq()[1])+1
+    master_switch_name = "m" + str(our_level)
+    self.id_gen.ingestByName(master_switch_name)
+    master_switch = switches[self.id_gen.getDPID()]
+    # for every destination switch, have master go back to the old exit point
+    for dest_switch in destination_switches:
+      master_switch.install(dest_switch, master_self_port)
+
+    # in old proxy (a), for every dest in B, route to master rather than across the way
+    for dest_switch in destination_switches:
+      a.install(dest_switch, 2)
+
   def _handle_PortStatus(self, event):
     self.id_gen.ingestByDpid(self.dpid)
+    if self.id_gen.switch_type != self.id_gen.SWITCH:
+	return # there is no action we need to take if it's the master's end
+    if event.port != 3:
+	return # we only care about links that cross DCells (we assume no rack failure)
     curr_switch_name = self.id_gen.getName()
-    print event.modified, event.added, event.deleted, event.ofp.desc.state, curr_switch_name
-    if event.modified and event.ofp.desc.state == 1:
+    if event.modified and event.ofp.desc.state == 1 and not self.interDCELL_link_failed:
 	# dropped
-        print "dropped", event.port, curr_switch_name
-    if event.modified and event.ofp.desc.state == 0:
+        print "dropped", event.port, curr_switch_name, self.GetInterDCellSwitchName()
+        self.handleFailedLink()
+        self.interDCELL_link_failed = True # mark link as failed
+    elif event.modified and event.ofp.desc.state == 0 and self.interDCELL_link_failed:
         # reactivated
-        print "reactivated", event.port, curr_switch_name
+        print "reactivated", event.port, curr_switch_name, self.GetInterDCellSwitchName()
+        self.handleReactivatedLink()
+        self.interDCELL_link_failed = False # back to normal
 
   def _handle_PacketIn (self, event):
     """
@@ -239,23 +335,13 @@ class dcell_routing (object):
     return [srcSwitch, masterSwitch, destSwitch]
 
   def GetLink(self, pref, cellId1, cellId2):
-    s = min(int(cellId1), int(cellId2))
-    d = max(int(cellId1), int(cellId2))
-
-
-    n1Target = (d - 1) % N
-    n1Name = "s" + str(s) + str(n1Target)
-    self.id_gen.ingestByName(n1Name)
-    n1Dpid = self.id_gen.getDPID()
-
-    n2Name = "s" + str(d) + str(s)
-    self.id_gen.ingestByName(n2Name)
-    n2Dpid = self.id_gen.getDPID()
-
-    if (s == int(cellId1)):
-      return (n1Dpid, n2Dpid)
-    else:
-      return (n2Dpid, n1Dpid)
+    # for now we are ignoring pref since we assume only dcell1
+    (n1, n2) = GetDCellLink(int(cellId1), int(cellId2))
+    self.id_gen.ingestByName(n1)
+    n1dpid = self.id_gen.getDPID()
+    self.id_gen.ingestByName(n2)
+    n2dpid = self.id_gen.getDPID()
+    return (n1dpid, n2dpid)
 
 def launch ():
   """

@@ -1,4 +1,17 @@
 from pox.ext.dcell_constants import N, L
+
+# given the numbers of two DCELL1 numbers, return the link between them (as a pair of switch names)
+def GetDCellLink(level1, level2):
+	s = min(level1, level2)
+	d = max(level1, level2)
+	n1Target = (d - 1) % N
+	n1Name = "s" + str(s) + str(n1Target)
+	n2Name = "s" + str(d) + str(s)
+	if (s == level1):
+	  return (n1Name, n2Name)
+	else:
+	  return (n2Name, n1Name)
+
 class SwitchIDGenerator:
   HOST = "h"
   SWITCH = "s"

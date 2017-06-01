@@ -9,7 +9,7 @@ from mininet.node import RemoteController
 from mininet.util import dumpNodeConnections
 from mininet.cli import CLI
 sys.path.append("../../")
-from pox.ext.id_generator import SwitchIDGenerator
+from pox.ext.util import SwitchIDGenerator
 from time import sleep, time
 topo_id_gen = SwitchIDGenerator()
 class DCellTop (Topo):
@@ -155,7 +155,7 @@ def main():
 	n = int(sys.argv[1])
 	l = int(sys.argv[2])
 
-	iperf_duration = 500
+	iperf_duration = 15
 	drop_link_time = 3
 	pick_up_link_time = 7
 	drop_server_time = 10
@@ -183,12 +183,12 @@ def main():
 			add_link(net, "s03", "s40")
 			exp_status = 2
 		if delta > drop_server_time and exp_status == 2:
-			print "dropping server"
-			stop_server(net, "s03")
+			#print "dropping server"
+			#stop_server(net, "s03")
 			exp_status = 3
 		if delta > pick_up_server_time and exp_status == 3:
-			print "picking up server"
-			start_server(net, "s03")
+			#print "picking up server"
+			#start_server(net, "s03")
 			exp_status = 4
 		if delta > iperf_duration + 5:
 			break
