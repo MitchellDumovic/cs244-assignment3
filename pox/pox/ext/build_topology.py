@@ -11,6 +11,7 @@ from mininet.util import dumpNodeConnections
 from mininet.cli import CLI
 sys.path.append("../../")
 from pox.ext.util import SwitchIDGenerator
+from subprocess import Popen
 from time import sleep, time
 topo_id_gen = SwitchIDGenerator()
 class DCellTop (Topo):
@@ -165,10 +166,10 @@ def main():
         
 	net.start()
 	dumpNodeConnections(net.hosts)
-	CLI(net)
 	net.pingAll()
-	CLI(net)
 	
+	tcpdump_cmd = 'sudo tcpdump -i s10-eth3 > tcpdump_s10.txt'
+	tcpdump_process = Popen([tcpdump_cmd], shell=True)
 	start_time = time()
 	start_iperf(net, "h00", "h43", iperf_duration)
 
@@ -190,10 +191,10 @@ def main():
 			stop_server(net, "s03")
 			exp_status = 3
 		if delta > iperf_duration + 2:
+			print "Finished up"
 			break
 	net.stop()
-  	# os.system("python ./plot_throughput.py -f h00_h43_iperf.txt -o throughput_plot.png")
-	
+	tcpdump_process.terminate()
 
 if __name__ == "__main__":
 	main()

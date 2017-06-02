@@ -45,6 +45,7 @@ class DCellSwitch (object):
     self.id_gen = SwitchIDGenerator()
     self.interDCELL_link_failed = False
     self.host_failed = False
+    self.flow_msgs = []
 
   def getHostMac(self):
     assert self.dpid is not None
@@ -60,6 +61,7 @@ class DCellSwitch (object):
     msg.match = of.ofp_match(dl_dst = EthAddr(dest_switch.getHostMac()))
     msg.actions.append(of.ofp_action_output(port=port))
     self.connection.send(msg)
+    self.flow_msgs.append(msg)
 
   def connect (self, connection, dpid):
     assert(connection is not None)
@@ -257,6 +259,9 @@ class dcell_routing (object):
     else:
       log.warning("Reconnecting. DPID = " + str(dpidFormatted) + ", switchCounter = " + str(self.switchCounter))
       sw.connect(event.connection, dpidFormatted)
+      # Reinstall flow table entries
+      for msg in sw.flow_msgs:
+	sw.connection.send(msg)
 
 
   def installAllPaths(self):
