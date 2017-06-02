@@ -10,6 +10,7 @@ from mininet.node import RemoteController
 from mininet.util import dumpNodeConnections
 from mininet.cli import CLI
 sys.path.append("../../")
+from pox.ext.dcell_pox import DCELLPOX
 from pox.ext.util import SwitchIDGenerator
 from subprocess import Popen
 from time import sleep, time
@@ -162,9 +163,10 @@ def main():
 	drop_server_time = 104
 
 	topo = DCellTop(n, l)
-	net = Mininet(topo=topo, host=CPULimitedHost, link = TCLink, controller=RemoteController)
+	net = Mininet(topo=topo, host=CPULimitedHost, link = TCLink, controller=DCELLPOX)
         
 	net.start()
+        sleep(3)
 	dumpNodeConnections(net.hosts)
 	net.pingAll()
 	
@@ -173,11 +175,14 @@ def main():
 	start_time = time()
 	start_iperf(net, "h00", "h43", iperf_duration)
 
+	cycle = 0
 	exp_status = 0 # 0 if begin, 1 if link dropped, 2 if link picked up again, 3 if server dropped, 4 if server picked up again
 	while True:
+		cycle += 1
 		sleep(1)
 		now = time()
 		delta = now - start_time
+                if cycle % 20 == 0: print ("curr time: %d" % delta)
 		if delta > drop_link_time and exp_status == 0:
 			print "dropping link"
 			drop_link(net, "s03", "s40")
