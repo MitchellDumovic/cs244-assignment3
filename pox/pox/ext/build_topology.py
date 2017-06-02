@@ -1,3 +1,4 @@
+import os
 import sys
 from mininet.topo import Topo
 from mininet.net import Mininet
@@ -26,8 +27,6 @@ class DCellTop (Topo):
 		if l == 0:
 			init_pref = ["0"]
 		self.build_topology(init_pref, n, l)
-		# self.build_trivial_topology()
-		print 'done building'
 
 	def find_t_k(self, n, l):
 		result = []
@@ -109,6 +108,7 @@ def start_iperf(net, name1, name2, duration):
 
 # return the link that was dropped
 def drop_link(net, name1, name2):
+	print "dropping link", name1, name2
 	net.configLinkStatus(name1, name2, "down")
 
 def add_link(net, name1, name2):
@@ -155,17 +155,20 @@ def main():
 	n = int(sys.argv[1])
 	l = int(sys.argv[2])
 
-	iperf_duration = 15
-	drop_link_time = 3
-	pick_up_link_time = 7
-	drop_server_time = 10
-	pick_up_server_time = 13
+	iperf_duration = 160
+	drop_link_time = 34
+	pick_up_link_time = 42
+	drop_server_time = 104
 
 	topo = DCellTop(n, l)
 	net = Mininet(topo=topo, host=CPULimitedHost, link = TCLink, controller=RemoteController)
-        net.start()
+        
+	net.start()
+	dumpNodeConnections(net.hosts)
 	CLI(net)
-	net.pingAll()	
+	net.pingAll()
+	CLI(net)
+	
 	start_time = time()
 	start_iperf(net, "h00", "h43", iperf_duration)
 
@@ -183,16 +186,14 @@ def main():
 			add_link(net, "s03", "s40")
 			exp_status = 2
 		if delta > drop_server_time and exp_status == 2:
-			#print "dropping server"
-			#stop_server(net, "s03")
+			print "dropping server"
+			stop_server(net, "s03")
 			exp_status = 3
-		if delta > pick_up_server_time and exp_status == 3:
-			#print "picking up server"
-			#start_server(net, "s03")
-			exp_status = 4
-		if delta > iperf_duration + 5:
+		if delta > iperf_duration + 2:
 			break
 	net.stop()
+  	# os.system("python ./plot_throughput.py -f h00_h43_iperf.txt -o throughput_plot.png")
+	
 
 if __name__ == "__main__":
 	main()

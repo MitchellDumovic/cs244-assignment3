@@ -30,7 +30,7 @@ import struct
 from pox.lib.packet.ipv4 import ipv4
 from pox.ext.util import SwitchIDGenerator, GetDCellLink
 from pox.ext.dcell_constants import N, L, NUM_SWITCHES
-
+from time import sleep
 log = core.getLogger()
 
 # Switches we know of.  [dpid] -> Switch
@@ -44,6 +44,7 @@ class DCellSwitch (object):
     self._listeners = None
     self.id_gen = SwitchIDGenerator()
     self.interDCELL_link_failed = False
+    self.host_failed = False
 
   def getHostMac(self):
     assert self.dpid is not None
@@ -67,7 +68,6 @@ class DCellSwitch (object):
     assert(self.dpid == dpid)
     self.connection = connection
     self._listeners = connection.addListeners(self)
-    connection.send(of.ofp_flow_mod(match=of.ofp_match(),command=of.OFPFC_DELETE))
     log.info("Connect %s" % (connection,))
 
   def disconnect (self):
@@ -200,12 +200,20 @@ class DCellSwitch (object):
     if self.id_gen.switch_type != self.id_gen.SWITCH:
 	return # there is no action we need to take if it's the master's end
     if event.port != 3:
+	# Host failure
+	if event.modified and event.ofp.desc.state == 1 and event.port == 1:
+		self.host_failed = True
+		sleep(5)
+	if event.modified and event.ofp.desc.state == 0 and self.host_failed:
+		self.host_failed = False
 	return # we only care about links that cross DCells (we assume no rack failure)
     curr_switch_name = self.id_gen.getName()
     if event.modified and event.ofp.desc.state == 1 and not self.interDCELL_link_failed:
 	# dropped
         print "dropped", event.port, curr_switch_name, self.GetInterDCellSwitchName()
-        self.handleFailedLink()
+	if not self.host_failed:
+	    sleep(0.5)
+	self.handleFailedLink()
         self.interDCELL_link_failed = True # mark link as failed
     elif event.modified and event.ofp.desc.state == 0 and self.interDCELL_link_failed:
         # reactivated
