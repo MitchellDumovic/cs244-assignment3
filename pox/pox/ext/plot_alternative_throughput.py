@@ -48,6 +48,7 @@ axes = plt.gca()
 plt.xlabel("Time (seconds)")
 plt.ylabel("Packets seen over alternate route")
 plt.grid(True)
+plt.tight_layout()
 
 if args.out:
 	plt.savefig(args.out)

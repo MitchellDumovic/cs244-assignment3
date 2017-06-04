@@ -212,14 +212,12 @@ class DCellSwitch (object):
     curr_switch_name = self.id_gen.getName()
     if event.modified and event.ofp.desc.state == 1 and not self.interDCELL_link_failed:
 	# dropped
-        print "dropped", event.port, curr_switch_name, self.GetInterDCellSwitchName()
 	if not self.host_failed:
 	    sleep(0.5)
 	self.handleFailedLink()
         self.interDCELL_link_failed = True # mark link as failed
     elif event.modified and event.ofp.desc.state == 0 and self.interDCELL_link_failed:
         # reactivated
-        print "reactivated", event.port, curr_switch_name, self.GetInterDCellSwitchName()
         self.handleReactivatedLink()
         self.interDCELL_link_failed = False # back to normal
 
@@ -232,7 +230,6 @@ class DCellSwitch (object):
       if packet.payload.opcode == arp.REQUEST:
         # send ARP reply
         self.send_arp_reply(event)
-        #print "sent arp reply to %s" % (packet.src.toStr())
 
   def _handle_ConnectionDown (self, event):
     self.disconnect()

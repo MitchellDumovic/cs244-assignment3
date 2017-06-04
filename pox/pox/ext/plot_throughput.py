@@ -29,7 +29,6 @@ def parse_iperf(fname):
 			break
 	return ret
 
-print parse_iperf(args.file)
 
 m.rc('figure', figsize=(16,6))
 fig = figure()
@@ -45,6 +44,7 @@ axes.set_ylim([0, 100])
 plt.xlabel("Time (seconds)")
 plt.ylabel("Throughput (Mbits/sec)")
 plt.grid(True)
+plt.tight_layout()
 
 if args.out:
 	plt.savefig(args.out)

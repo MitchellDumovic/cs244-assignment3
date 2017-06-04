@@ -18,8 +18,6 @@ topo_id_gen = SwitchIDGenerator()
 class DCellTop (Topo):
 	
 	def build(self, n=4, l=1):
-		print n
-		print l
 		self.bw = 100
 		self.delay = 5
 		self.time = 200
@@ -57,7 +55,6 @@ class DCellTop (Topo):
 			macMaster = topo_id_gen.getMac()
 			dpidMaster = topo_id_gen.getDPID()
 			self.addSwitch(masterswitch, mac=macMaster, dpid=dpidMaster)
-			print masterswitch, macMaster, dpidMaster
 			for i in range(0, n):
 				new_pref = pref + [str(i)]
 
@@ -65,7 +62,6 @@ class DCellTop (Topo):
 				topo_id_gen.ingestByName(innerswitch)
 				macSwitch = topo_id_gen.getMac()
 				dpidSwitch = topo_id_gen.getDPID()
-				print innerswitch, macSwitch, dpidSwitch
 				self.addSwitch(innerswitch, mac=macSwitch, dpid=dpidSwitch)
 
 				innerhost = self.gen_name(new_pref, "h")
@@ -73,13 +69,10 @@ class DCellTop (Topo):
 				macHost = topo_id_gen.getMac()
 				dpidHost = topo_id_gen.getDPID()
 				ipHost = topo_id_gen.getIP()
-				print innerhost, macHost, dpidHost, ipHost
 				self.addHost(innerhost, mac=macHost, dpid=dpidHost, ip=ipHost)
 				
-				print "linking %s %s:" % (innerswitch, innerhost)
 				# switch to host is port 1 for both switch and host
 				self.addLink(innerswitch, innerhost, bw=self.bw, port1=1, port2=1)
-				print "linking %s %s:" % (innerswitch, masterswitch)
 				# switch to master switch is 2 for switch and i+1 for master switch
 				self.addLink(innerswitch, masterswitch, bw=self.bw, port1=2, port2=i+1)
 		else:
@@ -92,15 +85,12 @@ class DCellTop (Topo):
 					n1 = self.gen_name(pref + [str(i), str(j-1)], "s")
 					n2 = self.gen_name(pref + [str(j), str(i)], "s")
 					self.addLink(n1, n2, bw=self.bw, port1=3, port2=3)
-					print "linking %s %s:" % (n1, n2)
 
 
 def start_iperf(net, name1, name2, duration):
 	h1 = net.get(name1)
 	h2 = net.get(name2)
 
-	print "Starting iperf server..."
-	
 	server = h2.popen("iperf -s -w 16m")
 	output_file = "./%s_%s_iperf.txt" % (name1, name2)
 	
@@ -110,7 +100,6 @@ def start_iperf(net, name1, name2, duration):
 
 # return the link that was dropped
 def drop_link(net, name1, name2):
-	print "dropping link", name1, name2
 	net.configLinkStatus(name1, name2, "down")
 
 def add_link(net, name1, name2):
@@ -152,55 +141,86 @@ def start_server(net, name):
 	for (name1, name2) in link_names:
 		add_link(net, name1, name2)
 
-def main():
-	assert len(sys.argv) == 3
-	n = int(sys.argv[1])
-	l = int(sys.argv[2])
-
+def experiment1(net):
 	iperf_duration = 160
-	drop_link_time = 34
-	pick_up_link_time = 42
-	drop_server_time = 104
+        drop_link_time = 34
+        pick_up_link_time = 42
+        drop_server_time = 104
 
-	topo = DCellTop(n, l)
-	net = Mininet(topo=topo, host=CPULimitedHost, link = TCLink, controller=DCELLPOX)
-        
+        net.start()
+        sleep(3)
+        dumpNodeConnections(net.hosts)
+
+        tcpdump_cmd = 'sudo tcpdump -i s10-eth3 > tcpdump_s10.txt'
+        tcpdump_process = Popen([tcpdump_cmd], shell=True)
+        net.pingAll()
+        start_time = time()
+        start_iperf(net, "h00", "h43", iperf_duration)
+
+        cycle = 0
+        exp_status = 0 # 0 if begin, 1 if link dropped, 2 if link picked up again, 3 if server dropped, 4 if server picked up again
+        while True:
+                cycle += 1
+                sleep(1)
+                now = time()
+                delta = now - start_time
+                if cycle % 20 == 0: print ("curr time: %d" % delta)
+                if delta > drop_link_time and exp_status == 0:
+                        drop_link(net, "s03", "s40")
+                        exp_status = 1
+                if delta > pick_up_link_time and exp_status == 1:
+                        add_link(net, "s03", "s40")
+                        exp_status = 2
+                if delta > drop_server_time and exp_status == 2:
+                        stop_server(net, "s03")
+                        exp_status = 3
+                if delta > iperf_duration + 2:
+                        print "Finished up"
+                        break
+        net.stop()
+        tcpdump_process.terminate()
+
+def start_iperf_mb(net, h1, h2, mb):
+
+
+        server = h2.popen("iperf -s -w 16m")
+        output_file = "./iperfs/%s_%s_iperf.txt" % (h1.name, h2.name)
+
+        iperf_cmd = "iperf -c %s -n %dM > %s -i 1" % (h2.IP(), mb, output_file)
+
+        client = h1.popen(iperf_cmd, shell=True)
+	return client
+
+def experiment2(net, n):
 	net.start()
         sleep(3)
-	dumpNodeConnections(net.hosts)
-	net.pingAll()
-	
-	tcpdump_cmd = 'sudo tcpdump -i s10-eth3 > tcpdump_s10.txt'
-	tcpdump_process = Popen([tcpdump_cmd], shell=True)
-	start_time = time()
-	start_iperf(net, "h00", "h43", iperf_duration)
+        dumpNodeConnections(net.hosts)
 
-	cycle = 0
-	exp_status = 0 # 0 if begin, 1 if link dropped, 2 if link picked up again, 3 if server dropped, 4 if server picked up again
-	while True:
-		cycle += 1
-		sleep(1)
-		now = time()
-		delta = now - start_time
-                if cycle % 20 == 0: print ("curr time: %d" % delta)
-		if delta > drop_link_time and exp_status == 0:
-			print "dropping link"
-			drop_link(net, "s03", "s40")
-			exp_status = 1
-		if delta > pick_up_link_time and exp_status == 1:
-			print "adding link back"
-			add_link(net, "s03", "s40")
-			exp_status = 2
-		if delta > drop_server_time and exp_status == 2:
-			print "dropping server"
-			stop_server(net, "s03")
-			exp_status = 3
-		if delta > iperf_duration + 2:
-			print "Finished up"
-			break
-	net.stop()
-	tcpdump_process.terminate()
+        net.pingAll()
+        start_time = time()
+	clients = []
+	for node1 in net.hosts:
+		for node2 in net.hosts:
+			if node1 == node2:
+				continue
+			clients.append(start_iperf_mb(net, node1, node2, 250))
 
+	for i, client in enumerate(clients):
+		client.wait()
+
+        net.stop()
+def main():
+	assert len(sys.argv) == 4
+	n = int(sys.argv[1])
+	l = int(sys.argv[2])
+	experiment = int(sys.argv[3])
+	assert (experiment == 1 or experiment == 2)
+	topo = DCellTop(n, l)
+	net = Mininet(topo=topo, host=CPULimitedHost, link = TCLink, controller=DCELLPOX)
+	if experiment == 1:
+		experiment1(net)
+	else:
+		experiment2(net, n)
 if __name__ == "__main__":
 	main()
 
